@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Frame Foto Gradient</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#14171a;--muted:#6b7280;--line:#e2e5ea;--accent:#0a84ff;--c1:#d9dde3;--c2:#eef0f3;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101214;--card:#1a1d21;--text:#eef0f2;--muted:#9aa3ad;--line:#2b3037;--c1:#2a2e34;--c2:#22262b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#101214;--card:#1a1d21;--text:#eef0f2;--muted:#9aa3ad;--line:#2b3037;--c1:#2a2e34;--c2:#22262b;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;justify-content:center;padding:20px}
+.wrap{width:100%;max-width:520px}
+h1{font-size:20px;margin:0 0 4px}
+p.sub{margin:0 0 16px;color:var(--muted);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+.stage{width:100%;aspect-ratio:1;border-radius:12px;overflow:hidden;touch-action:none;cursor:grab;
+background-image:linear-gradient(45deg,var(--c1) 25%,transparent 25%,transparent 75%,var(--c1) 75%),linear-gradient(45deg,var(--c1) 25%,transparent 25%,transparent 75%,var(--c1) 75%);
+background-color:var(--c2);background-size:20px 20px;background-position:0 0,10px 10px}
+.stage:active{cursor:grabbing}
+canvas{width:100%;height:100%;display:block}
+.row{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
+label.lbl{font-size:13px;color:var(--muted);min-width:64px}
+input[type=range]{flex:1;min-width:120px;accent-color:var(--accent)}
+button,.btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--text);padding:10px 14px;border-radius:10px;font-size:14px;cursor:pointer;font-family:inherit}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.45;cursor:not-allowed}
+.grow{flex:1;text-align:center}
+.hint{font-size:12px;color:var(--muted);margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Frame Foto Gradient</h1>
+  <p class="sub">Upload gambar, geser &amp; zoom, lalu unduh dengan background transparan.</p>
+  <div class="card">
+    <div class="stage" id="stage"><canvas id="cv" width="1000" height="1000"></canvas></div>
+    <div class="row">
+      <label class="btn primary grow" for="file">Pilih gambar</label>
+      <input id="file" type="file" accept="image/*" hidden>
+    </div>
+    <div class="row">
+      <label class="lbl" for="zoom">Zoom</label>
+      <input id="zoom" type="range" min="1" max="4" step="0.01" value="1" disabled>
+    </div>
+    <div class="row">
+      <button id="dlPng" class="grow" disabled>Unduh PNG</button>
+      <button id="dlSvg" class="grow" disabled>Unduh SVG</button>
+    </div>
+    <div class="hint">Tips: seret foto untuk menggeser posisi. Hasil PNG berukuran 1000×1000 px.</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var SIZE=1000, C=SIZE/2;
+  var RING_R=422, RING_W=36, PHOTO_R=375;
+  var G1='#0091FF', G2='#00F5A0';
+  var cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+  var fileEl=document.getElementById('file'), zoomEl=document.getElementById('zoom');
+  var dlPng=document.getElementById('dlPng'), dlSvg=document.getElementById('dlSvg');
+  var img=null, zoom=1, offX=0, offY=0, dataUrl=null;
+
+  function geom(){
+    var base=Math.max(2*PHOTO_R/img.width, 2*PHOTO_R/img.height);
+    var s=base*zoom, w=img.width*s, h=img.height*s;
+    // batasi offset supaya lingkaran selalu terisi foto
+    var mx=Math.max(0,(w-2*PHOTO_R)/2), my=Math.max(0,(h-2*PHOTO_R)/2);
+    offX=Math.min(mx,Math.max(-mx,offX)); offY=Math.min(my,Math.max(-my,offY));
+    return {x:C-w/2+offX, y:C-h/2+offY, w:w, h:h};
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,SIZE,SIZE);
+    // cincin gradient
+    var pad=C-RING_R-RING_W/2;
+    var g=ctx.createLinearGradient(pad,pad,SIZE-pad,SIZE-pad);
+    g.addColorStop(0,G1); g.addColorStop(1,G2);
+    ctx.beginPath(); ctx.arc(C,C,RING_R,0,Math.PI*2);
+    ctx.lineWidth=RING_W; ctx.strokeStyle=g; ctx.stroke();
+    if(!img){
+      ctx.beginPath(); ctx.arc(C,C,PHOTO_R,0,Math.PI*2);
+      ctx.fillStyle='rgba(128,128,128,.25)'; ctx.fill();
+      ctx.fillStyle='rgba(128,128,128,.9)'; ctx.font='40px system-ui,sans-serif'; ctx.textAlign='center';
+      ctx.fillText('Pilih gambar dulu',C,C+14);
+      return;
+    }
+    var p=geom();
+    ctx.save();
+    ctx.beginPath(); ctx.arc(C,C,PHOTO_R,0,Math.PI*2); ctx.clip();
+    ctx.drawImage(img,p.x,p.y,p.w,p.h);
+    ctx.restore();
+  }
+
+  fileEl.addEventListener('change',function(){
+    var f=fileEl.files&&fileEl.files[0]; if(!f) return;
+    var r=new FileReader();
+    r.onload=function(){
+      dataUrl=r.result;
+      var im=new Image();
+      im.onload=function(){
+        img=im; zoom=1; offX=0; offY=0; zoomEl.value=1;
+        zoomEl.disabled=dlPng.disabled=dlSvg.disabled=false;
+        draw();
+      };
+      im.src=dataUrl;
+    };
+    r.readAsDataURL(f);
+  });
+
+  zoomEl.addEventListener('input',function(){ zoom=parseFloat(zoomEl.value); draw(); });
+
+  // drag untuk geser
+  var dragging=false, lx=0, ly=0;
+  var stage=document.getElementById('stage');
+  stage.addEventListener('pointerdown',function(e){ if(!img) return; dragging=true; lx=e.clientX; ly=e.clientY; stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointermove',function(e){
+    if(!dragging) return;
+    var k=SIZE/stage.getBoundingClientRect().width;
+    offX+=(e.clientX-lx)*k; offY+=(e.clientY-ly)*k; lx=e.clientX; ly=e.clientY; draw();
+  });
+  function stop(){ dragging=false; }
+  stage.addEventListener('pointerup',stop); stage.addEventListener('pointercancel',stop);
+  stage.addEventListener('wheel',function(e){
+    if(!img) return; e.preventDefault();
+    zoom=Math.min(4,Math.max(1,zoom-e.deltaY*0.002)); zoomEl.value=zoom; draw();
+  },{passive:false});
+
+  function save(blobOrUrl,name){
+    var a=document.createElement('a');
+    a.href=blobOrUrl; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  dlPng.addEventListener('click',function(){
+    cv.toBlob(function(b){
+      var u=URL.createObjectURL(b); save(u,'foto-frame.png'); setTimeout(function(){URL.revokeObjectURL(u)},2000);
+    },'image/png');
+  });
+
+  dlSvg.addEventListener('click',function(){
+    var p=geom(), pad=C-RING_R-RING_W/2;
+    var svg='<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 '+SIZE+' '+SIZE+'" width="'+SIZE+'" height="'+SIZE+'">'+
+      '<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="'+pad+'" y1="'+pad+'" x2="'+(SIZE-pad)+'" y2="'+(SIZE-pad)+'">'+
+      '<stop offset="0" stop-color="'+G1+'"/><stop offset="1" stop-color="'+G2+'"/></linearGradient>'+
+      '<clipPath id="c"><circle cx="'+C+'" cy="'+C+'" r="'+PHOTO_R+'"/></clipPath></defs>'+
+      '<circle cx="'+C+'" cy="'+C+'" r="'+RING_R+'" fill="none" stroke="url(#g)" stroke-width="'+RING_W+'"/>'+
+      '<image clip-path="url(#c)" x="'+p.x.toFixed(2)+'" y="'+p.y.toFixed(2)+'" width="'+p.w.toFixed(2)+'" height="'+p.h.toFixed(2)+'" href="'+dataUrl+'" xlink:href="'+dataUrl+'"/>'+
+      '</svg>';
+    var b=new Blob([svg],{type:'image/svg+xml'});
+    var u=URL.createObjectURL(b); save(u,'foto-frame.svg'); setTimeout(function(){URL.revokeObjectURL(u)},2000);
+  });
+
+  draw();
+})();
+</script>
+</body>
+</html>
